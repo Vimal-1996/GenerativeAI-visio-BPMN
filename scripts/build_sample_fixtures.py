@@ -14,12 +14,86 @@ Re-run with: .venv/Scripts/python.exe scripts/build_sample_fixtures.py
 from __future__ import annotations
 
 import os
+import shutil
+import zipfile
 
 import vsdx
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MEDIA_VSDX = os.path.join(REPO_ROOT, ".venv", "Lib", "site-packages", "vsdx", "media", "media.vsdx")
 OUT_DIR = os.path.join(REPO_ROOT, "fixtures", "demo")
+
+# Visio's Comments feature (MS-VSDX spec, section 2.2.9 / 2.3.4.2.9-11) isn't
+# supported by the `vsdx` library at all - reading OR writing. This part is
+# injected by rewriting the saved .vsdx's zip directly, independent of vsdx.
+COMMENTS_NS = "http://schemas.microsoft.com/office/visio/2011/1/core"
+
+
+def _build_comments_xml(comments: list[dict]) -> bytes:
+    authors: dict[str, str] = {}
+    for c in comments:
+        authors.setdefault(c["author"], c.get("initials", "".join(w[0] for w in c["author"].split())[:3].upper()))
+    author_ids = {name: str(i + 1) for i, name in enumerate(authors)}
+
+    author_entries = "".join(
+        f'<AuthorEntry ID="{author_ids[name]}" Name="{name}" Initials="{initials}"/>'
+        for name, initials in authors.items()
+    )
+    comment_entries = []
+    for i, c in enumerate(comments, start=1):
+        shape_attr = f' ShapeID="{c["shape_id"]}"' if c.get("shape_id") else ""
+        comment_entries.append(
+            f'<CommentEntry AuthorID="{author_ids[c["author"]]}" PageID="{c["page_id"]}"{shape_attr} '
+            f'Date="{c["date"]}" CommentID="{i}">{c["text"]}</CommentEntry>'
+        )
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<Comments xmlns="{COMMENTS_NS}">'
+        f'<AuthorList>{author_entries}</AuthorList>'
+        f'<CommentList>{"".join(comment_entries)}</CommentList>'
+        "</Comments>"
+    )
+    return xml.encode("utf-8")
+
+
+def add_comments_to_vsdx(path: str, comments: list[dict]) -> None:
+    """Post-process a saved .vsdx to inject a real Comments XML part:
+    visio/comments/comments1.xml, plus the [Content_Types].xml override and
+    the visio/_rels/document.xml.rels relationship that make it discoverable.
+    Rewrites the whole zip since those two parts must be edited in place.
+
+    Each comment dict: {"page_id": str, "shape_id": str | None, "author": str,
+    "date": str (ISO 8601), "text": str}.
+    """
+    tmp_path = path + ".tmp"
+    with zipfile.ZipFile(path, "r") as src:
+        content_types = src.read("[Content_Types].xml").decode("utf-8")
+        doc_rels = src.read("visio/_rels/document.xml.rels").decode("utf-8")
+
+        content_types = content_types.replace(
+            "</Types>",
+            '<Override PartName="/visio/comments/comments1.xml" '
+            'ContentType="application/vnd.ms-visio.comments+xml" /></Types>',
+        )
+        doc_rels = doc_rels.replace(
+            "</ns0:Relationships>",
+            '<ns0:Relationship Id="rIdComments1" '
+            'Type="http://schemas.microsoft.com/visio/2010/relationships/comments" '
+            'Target="comments/comments1.xml" /></ns0:Relationships>',
+        )
+
+        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as dst:
+            for item in src.infolist():
+                if item.filename == "[Content_Types].xml":
+                    dst.writestr(item, content_types)
+                elif item.filename == "visio/_rels/document.xml.rels":
+                    dst.writestr(item, doc_rels)
+                else:
+                    dst.writestr(item, src.read(item.filename))
+            dst.writestr("visio/comments/comments1.xml", _build_comments_xml(comments))
+
+    shutil.move(tmp_path, path)
 
 
 def _remove_connects_referencing(page: vsdx.Page, shape_ids: set[str]) -> None:
@@ -155,11 +229,58 @@ def build_cross_functional_process(path: str) -> None:
         vis.save_vsdx(path)
 
 
+def build_commented_process(path: str) -> None:
+    """Same Start -> Task -> End shape as simple_task_flow, plus a real
+    Visio Comments part: one comment attached to the task shape, one
+    page-level comment (no ShapeID) attached to the page itself."""
+    with vsdx.VisioFile(MEDIA_VSDX) as vis:
+        page = vis.pages[0]
+        start = page.find_shape_by_id("1")
+        task = page.find_shape_by_id("2")
+        circle = page.find_shape_by_id("7")
+        page.find_shape_by_id("5").remove()
+        page.find_shape_by_id("8").remove()
+        _remove_connects_referencing(page, {"5"})
+
+        _place(start, x=1.5, y=9.0, width=1.2, height=0.8, text="Start", master_name="Terminator")
+        _place(task, x=4.0, y=9.0, width=2.0, height=1.0, text="Review Application", master_name="Process")
+        _place(circle, x=6.5, y=9.0, width=1.2, height=0.8, text="End", master_name="Terminator")
+        page.find_shape_by_id("3").text = ""
+
+        vsdx.Connect.create(page=page, from_shape=task, to_shape=circle)
+
+        page_id = page.page_id
+        task_shape_id = task.ID
+
+        vis.save_vsdx(path)
+
+    add_comments_to_vsdx(
+        path,
+        [
+            {
+                "page_id": page_id,
+                "shape_id": task_shape_id,
+                "author": "Jane Reviewer",
+                "date": "2026-07-15T10:30:00.000",
+                "text": "Needs manager sign-off before this step can be marked complete.",
+            },
+            {
+                "page_id": page_id,
+                "shape_id": None,
+                "author": "Jane Reviewer",
+                "date": "2026-07-15T10:32:00.000",
+                "text": "Overall process still awaiting legal review.",
+            },
+        ],
+    )
+
+
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     build_simple_task_flow(os.path.join(OUT_DIR, "simple_task_flow.vsdx"))
     build_approval_gateway(os.path.join(OUT_DIR, "approval_gateway.vsdx"))
     build_cross_functional_process(os.path.join(OUT_DIR, "cross_functional_process.vsdx"))
+    build_commented_process(os.path.join(OUT_DIR, "commented_process.vsdx"))
     print(f"Wrote demo fixtures to {OUT_DIR}")
 
 

@@ -1,9 +1,9 @@
 from visio2bpmn.classification import ClassifiedShape
-from visio2bpmn.extraction import VisioConnector, VisioPage, VisioShape
+from visio2bpmn.extraction import VisioComment, VisioConnector, VisioPage, VisioShape
 from visio2bpmn.graph import build_page_graph
 
 
-def make_shape(id, bpmn_type, x, y, width, height, text=""):
+def make_shape(id, bpmn_type, x, y, width, height, text="", comments=None):
     shape = VisioShape(
         id=id,
         page_name="Page-1",
@@ -16,6 +16,7 @@ def make_shape(id, bpmn_type, x, y, width, height, text=""):
         y=y,
         width=width,
         height=height,
+        comments=comments or [],
     )
     return ClassifiedShape(shape=shape, bpmn_type=bpmn_type, source="config")
 
@@ -106,6 +107,40 @@ def test_fully_disconnected_terminator_event_is_reported_as_orphan():
     graph = build_page_graph(page, [disconnected])
 
     assert any("Orphan node" in w and "floating" in w for w in graph.warnings)
+
+
+def test_shape_and_page_comments_become_node_and_page_documentation():
+    page = VisioPage(
+        name="Page-1",
+        width=11.0,
+        height=8.5,
+        comments=[VisioComment(author="Jane", date="2026-07-15T10:00:00.000", text="Page-level note")],
+    )
+    task1 = make_shape(
+        "task1",
+        "task",
+        x=1.0,
+        y=1.0,
+        width=1.0,
+        height=1.0,
+        comments=[VisioComment(author="Jane", date="2026-07-15T10:01:00.000", text="Shape-level note")],
+    )
+
+    graph = build_page_graph(page, [task1])
+
+    assert "Page-level note" in graph.documentation
+    assert "Jane" in graph.documentation
+    assert "Shape-level note" in graph.nodes[0].documentation
+
+
+def test_shape_with_no_comments_has_empty_documentation():
+    page = VisioPage(name="Page-1", width=11.0, height=8.5)
+    task1 = make_shape("task1", "task", x=1.0, y=1.0, width=1.0, height=1.0)
+
+    graph = build_page_graph(page, [task1])
+
+    assert graph.documentation == ""
+    assert graph.nodes[0].documentation == ""
 
 
 def test_dangling_connector_and_orphan_node_are_reported_as_warnings():

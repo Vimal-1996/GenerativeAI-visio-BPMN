@@ -31,6 +31,10 @@ SAMPLES = {
         "fixtures/sample_basic.vsdx",
         "Plain shapes with no BPMN-relevant stencil name, to show how unmapped shapes are reported.",
     ),
+    "Commented process": (
+        "fixtures/demo/commented_process.vsdx",
+        "Has real Visio review comments (shape-level and page-level) - carried through as BPMN documentation.",
+    ),
 }
 
 st.set_page_config(page_title="Visio -> BPMN Converter", page_icon="\U0001F504", layout="wide")

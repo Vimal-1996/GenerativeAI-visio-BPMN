@@ -4,7 +4,7 @@ Converts a Visio `.vsdx` file into a standards-compliant BPMN 2.0 XML file, read
 
 See `plan` history for the full phased design. Pipeline stages, in order:
 
-1. **Extraction** (`visio2bpmn.extraction`) - parses the `.vsdx` with the [`vsdx`](https://github.com/dave-howard/vsdx) library into a plain "Visio IR": shapes (master/stencil name, text, geometry) and connectors (resolved source/target).
+1. **Extraction** (`visio2bpmn.extraction`) - parses the `.vsdx` with the [`vsdx`](https://github.com/dave-howard/vsdx) library into a plain "Visio IR": shapes (master/stencil name, text, geometry) and connectors (resolved source/target). Also reads Visio's review Comments (shape-level and page-level) directly from the file's raw XML, since `vsdx` doesn't support that part.
 2. **Classification** (`visio2bpmn.classification`) - maps each shape to a BPMN element type via `config/shape_mapping.yaml`, falling back to geometric heuristics, then (optionally) an LLM call for anything still unresolved.
 3. **Graph construction** (`visio2bpmn.graph`) - builds pools/lanes/nodes/flows, assigning nodes to lanes by geometric containment.
 4. **BPMN XML generation** (`visio2bpmn.bpmn_xml`) - emits `<definitions>` with `<process>`/`<collaboration>` and a `<bpmndi:BPMNDiagram>` so the imported diagram is laid out correctly, not just semantically valid.
@@ -37,7 +37,7 @@ The command prints any warnings (unmapped shapes, dangling connectors, orphan no
 .venv\Scripts\streamlit.exe run app.py
 ```
 
-Pick one of the pre-loaded sample diagrams (`fixtures/demo/*.vsdx`, plus the generic-shapes fixture) or upload your own `.vsdx`, then click **Convert to BPMN**. Shows conversion metrics, a live diagram preview (rendered from the same coordinates that go into the BPMNDI output), the generated XML, and any warnings - with a download button for the `.bpmn` file.
+Pick one of the pre-loaded sample diagrams (`fixtures/demo/*.vsdx`, plus the generic-shapes fixture) or upload your own `.vsdx`, then click **Convert to BPMN**. Shows conversion metrics, a live diagram preview (rendered from the same coordinates that go into the BPMNDI output), the generated XML, and any warnings - with a download button for the `.bpmn` file. Nodes with a Visio review comment attached show a small marker with a hover tooltip in the preview; the comment itself is carried into the `.bpmn` file as a `<bpmn:documentation>` element (see the "Commented process" sample).
 
 ## Tests
 

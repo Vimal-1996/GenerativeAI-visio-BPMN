@@ -13,6 +13,7 @@ import os
 from visio2bpmn.extraction import extract_document
 
 FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "..", "fixtures", "sample_basic.vsdx")
+COMMENTED_FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "..", "fixtures", "demo", "commented_process.vsdx")
 
 
 def test_extracts_one_page_with_expected_shapes_and_connectors():
@@ -47,3 +48,36 @@ def test_shape_geometry_is_populated():
     assert rectangle.height > 0
     assert rectangle.x > 0
     assert rectangle.y > 0
+
+
+def test_file_with_no_comments_part_returns_empty_comments():
+    document = extract_document(FIXTURE_PATH)
+    page = document.pages[0]
+
+    assert page.comments == []
+    assert all(shape.comments == [] for shape in page.shapes)
+
+
+def test_shape_and_page_level_comments_are_extracted_from_real_comments_part():
+    """commented_process.vsdx has a real Visio Comments XML part (MS-VSDX
+    2.2.9), injected by scripts/build_sample_fixtures.py since the vsdx
+    library has no support for authoring or reading it - this exercises
+    our own raw zip/XML parsing end to end."""
+    document = extract_document(COMMENTED_FIXTURE_PATH)
+    page = document.pages[0]
+
+    assert page.page_id is not None
+
+    assert len(page.comments) == 1
+    assert page.comments[0].author == "Jane Reviewer"
+    assert "legal review" in page.comments[0].text
+
+    task = next(s for s in page.shapes if s.text.strip() == "Review Application")
+    assert len(task.comments) == 1
+    assert task.comments[0].author == "Jane Reviewer"
+    assert "manager sign-off" in task.comments[0].text
+    assert task.comments[0].date == "2026-07-15T10:30:00.000"
+
+    # shapes with no comment attached still default to an empty list
+    start = next(s for s in page.shapes if s.text.strip() == "Start")
+    assert start.comments == []

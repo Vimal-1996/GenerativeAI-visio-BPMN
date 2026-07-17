@@ -63,7 +63,18 @@ def _node_shape_svg(node, left: float, top: float, w: float, h: float) -> str:
         f'<text x="{left + w / 2:.1f}" y="{text_y:.1f}" font-size="13" font-family="sans-serif" '
         f'text-anchor="middle" fill="#202124">{label}</text>'
     )
-    return shape + text
+
+    comment_marker = ""
+    if getattr(node, "documentation", ""):
+        mx, my = left + w - 6, top + 6
+        comment_marker = (
+            f'<g><circle cx="{mx:.1f}" cy="{my:.1f}" r="7" fill="#fbbc04" stroke="#202124" stroke-width="1"/>'
+            f'<text x="{mx:.1f}" y="{my + 3.5:.1f}" font-size="9" text-anchor="middle" '
+            f'font-family="sans-serif">!</text>'
+            f"<title>{_escape(node.documentation)}</title></g>"
+        )
+
+    return shape + text + comment_marker
 
 
 def render_page_svg(page: PageGraph) -> str:

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .classification import ClassifiedShape
-from .extraction import VisioPage
+from .extraction import VisioComment, VisioPage
 
 CONTAINER_TYPES = {"pool", "lane"}
 NON_FLOW_TYPES = {"group", "textAnnotation"}
@@ -40,6 +40,7 @@ class ProcessNode:
     y: float
     width: float
     height: float
+    documentation: str = ""
 
 
 @dataclass
@@ -83,6 +84,11 @@ class PageGraph:
     nodes: list[ProcessNode] = field(default_factory=list)
     flows: list[Flow] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    documentation: str = ""
+
+
+def _format_comments(comments: list[VisioComment]) -> str:
+    return "\n".join(f"{c.author} ({c.date}): {c.text}" for c in comments if c.text)
 
 
 def _bbox(shape: ClassifiedShape) -> tuple[float, float, float, float]:
@@ -108,7 +114,12 @@ def _best_container(node: ClassifiedShape, containers: list[ClassifiedShape]) ->
 
 
 def build_page_graph(page: VisioPage, classified: list[ClassifiedShape]) -> PageGraph:
-    graph = PageGraph(page_name=page.name, width=page.width, height=page.height)
+    graph = PageGraph(
+        page_name=page.name,
+        width=page.width,
+        height=page.height,
+        documentation=_format_comments(page.comments),
+    )
     key = _page_key(page.name)
     by_id = {c.shape.id: c for c in classified}
 
@@ -193,6 +204,7 @@ def build_page_graph(page: VisioPage, classified: list[ClassifiedShape]) -> Page
                 y=s.y,
                 width=s.width,
                 height=s.height,
+                documentation=_format_comments(s.comments),
             )
         )
 

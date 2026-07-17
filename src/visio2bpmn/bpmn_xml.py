@@ -92,6 +92,16 @@ def _node_center_point(node: ProcessNode, page_height: float) -> tuple[float, fl
     return node.x * SCALE, _flip_y(node.y, page_height)
 
 
+def _add_documentation(parent: etree._Element, text: str) -> None:
+    """`documentation` is the first child of every BPMN base element per
+    the XSD (tBaseElement), so this must be called before any other
+    SubElement is added under `parent`. Carries Visio Comments through -
+    most BPMN tools show it in a details panel when the element is
+    selected, mirroring Visio's click-to-reveal comment bubble."""
+    if text:
+        etree.SubElement(parent, _bpmn("documentation")).text = text
+
+
 def build_definitions(pages: list[PageGraph]) -> etree._Element:
     definitions = etree.Element(
         _bpmn("definitions"),
@@ -112,9 +122,12 @@ def _add_page(definitions: etree._Element, page: PageGraph) -> None:
     collaboration = None
     if multi_pool:
         collaboration = etree.SubElement(definitions, _bpmn("collaboration"), {"id": f"Collaboration_{_safe(page.page_name)}"})
+        _add_documentation(collaboration, page.documentation)
 
     for pool in page.pools:
         process = etree.SubElement(definitions, _bpmn("process"), {"id": f"Process_{pool.id}", "isExecutable": "false"})
+        if not multi_pool:
+            _add_documentation(process, page.documentation)
 
         if multi_pool:
             etree.SubElement(
@@ -136,7 +149,8 @@ def _add_page(definitions: etree._Element, page: PageGraph) -> None:
             attrib = {"id": node.id}
             if node.name:
                 attrib["name"] = node.name
-            etree.SubElement(process, _bpmn(tag), attrib)
+            node_el = etree.SubElement(process, _bpmn(tag), attrib)
+            _add_documentation(node_el, node.documentation)
 
         pool_node_ids = {n for lane in pool.lanes for n in lane.node_ids} | set(pool.node_ids)
         for flow in page.flows:

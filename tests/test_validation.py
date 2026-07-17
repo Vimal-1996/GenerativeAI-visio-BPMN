@@ -1,8 +1,13 @@
+import os
+
 from visio2bpmn.bpmn_xml import generate_bpmn_xml
 from visio2bpmn.classification import ClassifiedShape
+from visio2bpmn.cli import convert
 from visio2bpmn.extraction import VisioConnector, VisioPage, VisioShape
 from visio2bpmn.graph import build_page_graph
 from visio2bpmn.validation import validate_bpmn_xml
+
+COMMENTED_FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "..", "fixtures", "demo", "commented_process.vsdx")
 
 
 def make_shape(id, bpmn_type, x, y, width, height, text=""):
@@ -34,6 +39,17 @@ def test_generated_single_pool_document_is_schema_valid():
     graph = build_page_graph(page, classified)
 
     xml_bytes = generate_bpmn_xml([graph])
+    errors = validate_bpmn_xml(xml_bytes)
+    assert errors == [], f"Schema validation errors: {errors}"
+
+
+def test_real_file_with_comments_produces_schema_valid_documentation(tmp_path):
+    output_path = tmp_path / "commented_process.bpmn"
+    warnings = convert(input_path=COMMENTED_FIXTURE_PATH, output_path=str(output_path), use_llm_fallback=False)
+
+    assert warnings == []
+    xml_bytes = output_path.read_bytes()
+    assert b"<documentation>" in xml_bytes
     errors = validate_bpmn_xml(xml_bytes)
     assert errors == [], f"Schema validation errors: {errors}"
 
