@@ -12,6 +12,7 @@ __pycache__/
 .venv/
 venv/
 env/
+*.egg-info/
 
 # Node
 node_modules/
@@ -20,3 +21,6 @@ build/
 
 # Env
 .env
+
+# Claude Code local state
+.claude/

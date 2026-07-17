@@ -1,0 +1,28 @@
+[project]
+name = "visio2bpmn"
+version = "0.1.0"
+description = "Convert Visio (.vsdx) diagrams into Signavio-ready BPMN 2.0 XML"
+requires-python = ">=3.10"
+dependencies = [
+    "vsdx>=0.5.19",
+    "lxml>=5.0",
+    "PyYAML>=6.0",
+    "xmlschema>=3.0",
+    "anthropic>=0.40.0",
+    "streamlit>=1.38",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+visio2bpmn = "visio2bpmn.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

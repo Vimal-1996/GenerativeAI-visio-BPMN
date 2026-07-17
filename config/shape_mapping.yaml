@@ -1,0 +1,78 @@
+# Shape-mapping config for Phase 2 classification (visio2bpmn.classification).
+#
+# Keys are Visio master/stencil names (case-insensitive, matched after
+# stripping whitespace) as reported by VisioShape.master_name / .shape_name.
+# Values are the BPMN element type to emit.
+#
+# This is the primary classification path. A shape whose master name isn't
+# found here falls through to the geometric heuristics below, then - only if
+# still unresolved - an LLM fallback call (see classification.py). Extend
+# this file with your own stencil's master names rather than changing code.
+
+# --- Actual BPMN stencil (Visio's built-in BPMN template) ---
+bpmn_stencil:
+  "Task": task
+  "Send Task": task
+  "Receive Task": task
+  "User Task": task
+  "Service Task": task
+  "Manual Task": task
+  "Script Task": task
+  "Business Rule Task": task
+  "Sub-Process": subProcess
+  "Sub-Process (collapsed)": subProcess
+  "Transaction": subProcess
+  "Start Event": startEvent
+  "Start": startEvent
+  "End Event": endEvent
+  "End": endEvent
+  "Intermediate Event": intermediateEvent
+  "Intermediate Throw Event": intermediateEvent
+  "Intermediate Catch Event": intermediateEvent
+  "Exclusive Gateway": exclusiveGateway
+  "Parallel Gateway": parallelGateway
+  "Inclusive Gateway": inclusiveGateway
+  "Complex Gateway": complexGateway
+  "Event-Based Gateway": eventBasedGateway
+  "Pool": pool
+  "Lane": lane
+  "Data Object": dataObject
+  "Data Store": dataStore
+  "Group": group
+  "Text Annotation": textAnnotation
+
+# --- Generic Basic Flowchart stencil (no inherent BPMN semantics) ---
+basic_flowchart:
+  "Process": task
+  "Predefined Process": subProcess
+  "Terminator": event   # start vs end resolved by graph position in Phase 3
+  "Decision": exclusiveGateway
+  "Preparation": task
+  "Manual Operation": task
+  "Manual Input": task
+  "Document": dataObject
+  "Multidocument": dataObject
+  "Data": dataObject
+  "Stored Data": dataStore
+  "Internal Storage": dataObject
+  "Direct Data": dataStore
+  "Off-page Reference": intermediateEvent
+  "Card": dataObject
+  "Display": dataObject
+  "Or": eventBasedGateway
+  "Summing Junction": exclusiveGateway
+
+# --- Cross-functional flowchart stencil (pools/lanes) ---
+cross_functional:
+  "Vertical Swimlanes": pool
+  "Horizontal Swimlanes": pool
+  "Function Band": lane
+  "Separator": lane
+  "Cross-Functional Flowchart Frame": pool
+
+# --- Geometric fallback heuristics, used only when master_name has no match above ---
+geometric_fallback:
+  square_or_rectangle: task
+  diamond: exclusiveGateway
+  circle_or_oval: event
+  wide_shallow_container: lane
