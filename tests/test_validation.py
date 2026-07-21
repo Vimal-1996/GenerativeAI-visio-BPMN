@@ -1,5 +1,7 @@
 import os
 
+from lxml import etree
+
 from visio2bpmn.bpmn_xml import generate_bpmn_xml
 from visio2bpmn.classification import ClassifiedShape
 from visio2bpmn.cli import convert
@@ -8,6 +10,7 @@ from visio2bpmn.graph import build_page_graph
 from visio2bpmn.validation import validate_bpmn_xml
 
 COMMENTED_FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "..", "fixtures", "demo", "commented_process.vsdx")
+MULTIPAGE_FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "..", "fixtures", "demo", "sdlc_multipage.vsdx")
 
 
 def make_shape(id, bpmn_type, x, y, width, height, text=""):
@@ -41,6 +44,27 @@ def test_generated_single_pool_document_is_schema_valid():
     xml_bytes = generate_bpmn_xml([graph])
     errors = validate_bpmn_xml(xml_bytes)
     assert errors == [], f"Schema validation errors: {errors}"
+
+
+def test_real_multipage_file_is_schema_valid_with_unique_ids_across_pages(tmp_path):
+    """sdlc_multipage.vsdx has 3 pages with different pool/lane counts - a
+    real regression test for two things that were previously implemented
+    but never exercised by any test: (1) per-page id-prefixing in
+    graph.py actually avoids id collisions once every page's output is
+    merged into one <definitions>, and (2) build_definitions() places all
+    rootElements before any bpmndi:BPMNDiagram (interleaving them, as it
+    did before this fixture caught the bug, fails the real BPMN XSD)."""
+    output_path = tmp_path / "sdlc_multipage.bpmn"
+    warnings = convert(input_path=MULTIPAGE_FIXTURE_PATH, output_path=str(output_path), use_llm_fallback=False)
+
+    assert warnings == []
+    xml_bytes = output_path.read_bytes()
+    errors = validate_bpmn_xml(xml_bytes)
+    assert errors == [], f"Schema validation errors: {errors}"
+
+    root = etree.fromstring(xml_bytes)
+    ids = [el.get("id") for el in root.iter() if el.get("id") is not None]
+    assert len(ids) == len(set(ids)), "duplicate id attributes across pages in the merged document"
 
 
 def test_real_file_with_comments_produces_schema_valid_documentation(tmp_path):

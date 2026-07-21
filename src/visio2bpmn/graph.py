@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .classification import ClassifiedShape
-from .extraction import VisioComment, VisioPage
+from .extraction import VisioComment, VisioHyperlink, VisioPage
 
 CONTAINER_TYPES = {"pool", "lane"}
 NON_FLOW_TYPES = {"group", "textAnnotation"}
@@ -89,6 +89,25 @@ class PageGraph:
 
 def _format_comments(comments: list[VisioComment]) -> str:
     return "\n".join(f"{c.author} ({c.date}): {c.text}" for c in comments if c.text)
+
+
+def _format_hyperlink(link: VisioHyperlink) -> Optional[str]:
+    if link.address:
+        target = f"{link.address}#{link.sub_address}" if link.sub_address else link.address
+        text = f"Hyperlink: {target}"
+    elif link.sub_address:
+        text = f"Hyperlink: continues on page {link.sub_address!r}"
+    else:
+        return None
+    return f"{text} — {link.description}" if link.description else text
+
+
+def _format_hyperlinks(hyperlinks: list[VisioHyperlink]) -> str:
+    return "\n".join(text for text in (_format_hyperlink(link) for link in hyperlinks) if text)
+
+
+def _combine_documentation(*parts: str) -> str:
+    return "\n".join(p for p in parts if p)
 
 
 def _bbox(shape: ClassifiedShape) -> tuple[float, float, float, float]:
@@ -204,7 +223,7 @@ def build_page_graph(page: VisioPage, classified: list[ClassifiedShape]) -> Page
                 y=s.y,
                 width=s.width,
                 height=s.height,
-                documentation=_format_comments(s.comments),
+                documentation=_combine_documentation(_format_comments(s.comments), _format_hyperlinks(s.hyperlinks)),
             )
         )
 

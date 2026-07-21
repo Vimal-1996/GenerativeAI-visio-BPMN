@@ -7,6 +7,7 @@ from visio2bpmn.bpmn_xml import BPMN_NS
 from visio2bpmn.cli import convert
 
 FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "..", "fixtures", "sample_basic.vsdx")
+MULTIPAGE_FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "..", "fixtures", "demo", "sdlc_multipage.vsdx")
 
 
 def test_convert_runs_end_to_end_on_real_vsdx_file(tmp_path):
@@ -26,3 +27,24 @@ def test_convert_runs_end_to_end_on_real_vsdx_file(tmp_path):
     # fallback is disabled, so every shape should come back unresolved
     assert any("Unmapped shape" in w and "RECTANGLE" in w for w in warnings)
     assert any("Unmapped shape" in w and "CIRCLE" in w for w in warnings)
+
+
+def test_convert_runs_end_to_end_on_multipage_vsdx_file(tmp_path):
+    """sdlc_multipage.vsdx has 3 real pages - every shape uses a real
+    stencil name (Process/Decision/Terminator) so classification should
+    fully resolve, and each page should get its own <process> (or
+    <collaboration>) plus its own <bpmndi:BPMNDiagram>."""
+    output_path = tmp_path / "sdlc_multipage.bpmn"
+
+    warnings = convert(
+        input_path=MULTIPAGE_FIXTURE_PATH,
+        output_path=str(output_path),
+        use_llm_fallback=False,
+    )
+
+    assert warnings == []
+    root = etree.fromstring(output_path.read_bytes())
+    assert root.tag == f"{{{BPMN_NS}}}definitions"
+
+    assert len(root.findall(f"{{{BPMN_NS}}}process")) == 3
+    assert len(root.findall(f"{{http://www.omg.org/spec/BPMN/20100524/DI}}BPMNDiagram")) == 3

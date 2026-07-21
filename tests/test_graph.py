@@ -1,9 +1,9 @@
 from visio2bpmn.classification import ClassifiedShape
-from visio2bpmn.extraction import VisioComment, VisioConnector, VisioPage, VisioShape
+from visio2bpmn.extraction import VisioComment, VisioConnector, VisioHyperlink, VisioPage, VisioShape
 from visio2bpmn.graph import build_page_graph
 
 
-def make_shape(id, bpmn_type, x, y, width, height, text="", comments=None):
+def make_shape(id, bpmn_type, x, y, width, height, text="", comments=None, hyperlinks=None):
     shape = VisioShape(
         id=id,
         page_name="Page-1",
@@ -17,6 +17,7 @@ def make_shape(id, bpmn_type, x, y, width, height, text="", comments=None):
         width=width,
         height=height,
         comments=comments or [],
+        hyperlinks=hyperlinks or [],
     )
     return ClassifiedShape(shape=shape, bpmn_type=bpmn_type, source="config")
 
@@ -141,6 +142,47 @@ def test_shape_with_no_comments_has_empty_documentation():
 
     assert graph.documentation == ""
     assert graph.nodes[0].documentation == ""
+
+
+def test_same_document_hyperlink_becomes_node_documentation():
+    """An Off-page Reference shape's Hyperlink (Address="", SubAddress=<page
+    name>) should read as a "continues on page X" note in the node's
+    documentation, combined with any comments already there."""
+    page = VisioPage(name="Page-1", width=11.0, height=8.5)
+    link = make_shape(
+        "link1",
+        "intermediateEvent",
+        x=1.0,
+        y=1.0,
+        width=1.0,
+        height=1.0,
+        comments=[VisioComment(author="Jane", date="2026-07-15T10:00:00.000", text="Reviewed")],
+        hyperlinks=[VisioHyperlink(address="", sub_address="Page-2", description="Continues elsewhere")],
+    )
+
+    graph = build_page_graph(page, [link])
+
+    doc = graph.nodes[0].documentation
+    assert "Reviewed" in doc
+    assert "Hyperlink: continues on page 'Page-2'" in doc
+    assert "Continues elsewhere" in doc
+
+
+def test_external_hyperlink_becomes_node_documentation():
+    page = VisioPage(name="Page-1", width=11.0, height=8.5)
+    link = make_shape(
+        "link1",
+        "task",
+        x=1.0,
+        y=1.0,
+        width=1.0,
+        height=1.0,
+        hyperlinks=[VisioHyperlink(address="https://example.com/spec", sub_address="", description="")],
+    )
+
+    graph = build_page_graph(page, [link])
+
+    assert graph.nodes[0].documentation == "Hyperlink: https://example.com/spec"
 
 
 def test_dangling_connector_and_orphan_node_are_reported_as_warnings():

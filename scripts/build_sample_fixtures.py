@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import xml.etree.ElementTree as ET
 import zipfile
 
 import vsdx
@@ -111,6 +112,21 @@ def _remove_connects_referencing(page: vsdx.Page, shape_ids: set[str]) -> None:
 def _set_master_name(shape: vsdx.Shape, name: str) -> None:
     shape.xml.attrib["NameU"] = name
     shape.xml.attrib["Name"] = name
+
+
+def _add_hyperlink(shape: vsdx.Shape, *, address: str = "", sub_address: str = "", description: str = "") -> None:
+    """Attach a Hyperlink row directly to a shape's own XML (Section
+    N="Hyperlink" of Row/Cell elements) - `vsdx` has no authoring API for
+    this (same gap as Comments), but unlike Comments this section lives
+    inline on the shape itself, so it's just an ElementTree insert rather
+    than post-save zip surgery. address="" + sub_address=<page name> is
+    Visio's convention for a same-document link to another page (what an
+    "Off-page Reference" shape uses)."""
+    section = ET.SubElement(shape.xml, f"{vsdx.namespace}Section", {"N": "Hyperlink"})
+    row = ET.SubElement(section, f"{vsdx.namespace}Row", {"IX": "0"})
+    ET.SubElement(row, f"{vsdx.namespace}Cell", {"N": "Address", "V": address})
+    ET.SubElement(row, f"{vsdx.namespace}Cell", {"N": "SubAddress", "V": sub_address})
+    ET.SubElement(row, f"{vsdx.namespace}Cell", {"N": "Description", "V": description})
 
 
 def _place(shape: vsdx.Shape, x: float, y: float, width: float, height: float, text: str, master_name: str = "") -> None:

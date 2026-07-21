@@ -109,13 +109,22 @@ def build_definitions(pages: list[PageGraph]) -> etree._Element:
         attrib={"id": "Definitions_1", "targetNamespace": "http://bpmn.io/schema/bpmn"},
     )
 
+    # All rootElements (process/collaboration) must precede every
+    # bpmndi:BPMNDiagram per the BPMN XSD's tDefinitions content model, so
+    # diagrams are batched into a second pass rather than emitted inline
+    # per page - interleaving them is only invisible with a single page.
+    diagram_specs = []
     for page in pages:
-        _add_page(definitions, page)
+        plane_element_ref = _add_page(definitions, page)
+        diagram_specs.append((page, plane_element_ref))
+
+    for page, plane_element_ref in diagram_specs:
+        _add_diagram(definitions, page, plane_element_ref)
 
     return definitions
 
 
-def _add_page(definitions: etree._Element, page: PageGraph) -> None:
+def _add_page(definitions: etree._Element, page: PageGraph) -> str:
     node_by_id = {n.id: n for n in page.nodes}
     multi_pool = len(page.pools) > 1
 
@@ -176,8 +185,7 @@ def _add_page(definitions: etree._Element, page: PageGraph) -> None:
                     attrib["name"] = flow.name
                 etree.SubElement(collaboration, _bpmn("messageFlow"), attrib)
 
-    plane_element_ref = f"Collaboration_{_safe(page.page_name)}" if multi_pool else f"Process_{page.pools[0].id}"
-    _add_diagram(definitions, page, plane_element_ref)
+    return f"Collaboration_{_safe(page.page_name)}" if multi_pool else f"Process_{page.pools[0].id}"
 
 
 def _safe(name: str) -> str:

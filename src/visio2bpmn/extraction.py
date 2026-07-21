@@ -10,6 +10,14 @@ review comments attached to a shape or to a page - by parsing the raw
 Comments XML part directly, since the `vsdx` library has no support for
 it at all.
 
+Also reads Visio Hyperlinks: unlike Comments, these live inline in each
+shape's own XML (a `<Section N="Hyperlink">` of `<Row>`/`<Cell>` elements)
+which `vsdx` already parses into `Shape.xml`, so no separate zip part
+needs parsing - `vsdx` just never exposes the section itself. A shape's
+Address cell holds an external URL/path, or is empty for a link to
+another page in the same document, in which case SubAddress holds that
+page's name (e.g. an "Off-page Reference" shape linking pages together).
+
 This layer knows nothing about BPMN - that mapping happens in
 `visio2bpmn.classification`.
 """
@@ -36,6 +44,13 @@ class VisioComment:
 
 
 @dataclass
+class VisioHyperlink:
+    address: str  # external URL/path, or "" for a same-document link
+    sub_address: str  # target page name for a same-document link
+    description: str
+
+
+@dataclass
 class VisioShape:
     id: str
     page_name: str
@@ -49,6 +64,7 @@ class VisioShape:
     width: float
     height: float
     comments: list[VisioComment] = field(default_factory=list)
+    hyperlinks: list[VisioHyperlink] = field(default_factory=list)
 
 
 @dataclass
@@ -109,6 +125,28 @@ def _master_name(shape: "vsdx.Shape") -> Optional[str]:
     return None
 
 
+def _shape_hyperlinks(shape: "vsdx.Shape") -> list[VisioHyperlink]:
+    """Hyperlink rows live in the shape's own XML (Section N="Hyperlink"),
+    which `vsdx` already parses into `Shape.xml` for every shape - it just
+    never models this particular section, so we read it directly."""
+    try:
+        section = shape.xml.find(f'{vsdx.namespace}Section[@N="Hyperlink"]')
+    except Exception:
+        return []
+    if section is None:
+        return []
+
+    hyperlinks: list[VisioHyperlink] = []
+    for row in section.findall(f"{vsdx.namespace}Row"):
+        cells = {cell.attrib.get("N"): cell.attrib.get("V", "") for cell in row.findall(f"{vsdx.namespace}Cell")}
+        address = cells.get("Address", "").strip()
+        sub_address = cells.get("SubAddress", "").strip()
+        if not address and not sub_address:
+            continue
+        hyperlinks.append(VisioHyperlink(address=address, sub_address=sub_address, description=cells.get("Description", "").strip()))
+    return hyperlinks
+
+
 def extract_page(page: "vsdx.Page") -> VisioPage:
     all_shapes = page.all_shapes
 
@@ -160,6 +198,7 @@ def extract_page(page: "vsdx.Page") -> VisioPage:
                 y=y,
                 width=width,
                 height=height,
+                hyperlinks=_shape_hyperlinks(shape),
             )
         )
 
